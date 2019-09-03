@@ -76,6 +76,16 @@ func handle(conn *net.TCPConn) {
 		return
 	}
 	defer dialConn.Close()
+	err = conn.SetNoDelay(true)
+	if err != nil {
+		printError(err)
+		return
+	}
+	err = dialConn.SetNoDelay(true)
+	if err != nil {
+		printError(err)
+		return
+	}
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 	go trans(wg, conn, dialConn)
