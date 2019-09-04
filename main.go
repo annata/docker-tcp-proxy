@@ -6,20 +6,22 @@ import (
 	"flag"
 	"os"
 	"strconv"
+	"math/rand"
+	"time"
+	"fmt"
 )
 
 var (
-	domain  string
-	port    int
-	tcpAddr *net.TCPAddr
+	port     int
+	tcpAddr  *net.TCPAddr
+	addrList = make([]*net.TCPAddr, 0, 100)
 )
 
 func main() {
-	//rand.Seed(time.Now().UnixNano())
+	rand.Seed(time.Now().UnixNano())
 	if !parse() {
 		return
 	}
-
 	listen, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4zero, Port: port})
 	if err != nil {
 		printError(err)
@@ -37,6 +39,7 @@ func main() {
 }
 
 func parse() bool {
+	domain := ""
 	flag.IntVar(&port, "p", 0, "监听端口")
 	flag.StringVar(&domain, "d", "", "访问的域名端口")
 	flag.Parse()
@@ -54,23 +57,48 @@ func parse() bool {
 		domain = domainStr
 	}
 
-	if port <= 0 || port >= 65536 || domain == "" {
+	if domain != "" {
+		addr, err := net.ResolveTCPAddr("tcp", domain)
+		if err != nil {
+			printError(err)
+			return false
+		}
+		tcpAddr = addr
+	}
+
+	for i := 0; true; i++ {
+		d := os.Getenv("DOMAIN_" + strconv.Itoa(i))
+		if d == "" {
+			break
+		} else {
+			addr, err := net.ResolveTCPAddr("tcp", d)
+			if err != nil {
+				printError(err)
+				return false
+			}
+			fmt.Println(d)
+			fmt.Println(addr.String())
+			addrList = append(addrList, addr)
+		}
+	}
+
+	if port <= 0 || port >= 65536 || (tcpAddr == nil && len(addrList) == 0) {
 		flag.Usage()
 		return false
 	}
 
-	addr, err := net.ResolveTCPAddr("tcp", domain)
-	if err != nil {
-		printError(err)
-		return false
-	}
-	tcpAddr = addr
 	return true
 }
 
 func handle(conn *net.TCPConn) {
 	defer conn.Close()
-	dialConn, err := net.DialTCP("tcp", nil, tcpAddr)
+	var addr *net.TCPAddr
+	if len(addrList) == 0 {
+		addr = tcpAddr
+	} else {
+		addr = addrList[rand.Intn(len(addrList))]
+	}
+	dialConn, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
 		printError(err)
 		return
