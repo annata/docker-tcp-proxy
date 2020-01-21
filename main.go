@@ -1,20 +1,23 @@
 package main
 
 import (
-	"net"
-	"sync"
 	"flag"
+	"math/rand"
+	"net"
 	"os"
 	"strconv"
-	"math/rand"
+	"sync"
 	"time"
-	"fmt"
 )
 
 var (
-	port     int
-	tcpAddr  *net.TCPAddr
-	addrList = make([]*net.TCPAddr, 0, 100)
+	port        int
+	portList    = make([]int, 0, 100)
+	tcpAddr     *net.TCPAddr
+	udpAddr     *net.UDPAddr
+	tcpAddrList = make([]*net.TCPAddr, 0, 100)
+	udpAddrList = make([]*net.UDPAddr, 0, 100)
+	mode        int
 )
 
 func main() {
@@ -22,27 +25,57 @@ func main() {
 	if !parse() {
 		return
 	}
-	listen, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4zero, Port: port})
-	if err != nil {
-		printError(err)
-		return
-	}
-	defer listen.Close()
-	for {
-		conn, err := listen.AcceptTCP()
-		if err != nil {
-			printError(err)
-			break
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+
+	if len(portList) == 0 {
+		if mode == 0 || mode == 1 {
+			go tcp(wg, port, 0, len(tcpAddrList))
 		}
-		go handle(conn)
+		if mode == 2 || mode == 1 {
+			go udp(wg, port, 0, len(tcpAddrList))
+		}
+	} else {
+		tcpAddrListLen := len(tcpAddrList)
+		portListLen := len(portList)
+		aa := tcpAddrListLen / portListLen
+		bb := tcpAddrListLen % portListLen
+		start := 0
+
+		for i := 0; i < portListLen; i++ {
+			var num int
+			if i < bb {
+				num = aa + 1
+			} else {
+				num = aa
+			}
+			if mode == 0 || mode == 1 {
+				go tcp(wg, portList[i], start, num)
+			}
+			if mode == 2 || mode == 1 {
+				go udp(wg, portList[i], start, num)
+			}
+			start += num
+		}
 	}
+	wg.Wait()
 }
 
 func parse() bool {
 	domain := ""
 	flag.IntVar(&port, "p", 0, "监听端口")
 	flag.StringVar(&domain, "d", "", "访问的域名端口")
+	flag.IntVar(&mode, "m", 0, "转发模式,0为tcp,1为tcp+udp,2为udp.默认为0")
 	flag.Parse()
+	modeStr := os.Getenv("MODE")
+	if modeStr != "" {
+		modeInt, err := strconv.Atoi(modeStr)
+		if err != nil {
+			printError(err)
+			return false
+		}
+		mode = modeInt
+	}
 	portStr := os.Getenv("PORT")
 	if portStr != "" {
 		portInt, err := strconv.Atoi(portStr)
@@ -64,6 +97,13 @@ func parse() bool {
 			return false
 		}
 		tcpAddr = addr
+
+		addrTmp, e := net.ResolveUDPAddr("udp", domain)
+		if e != nil {
+			printError(err)
+			return false
+		}
+		udpAddr = addrTmp
 	}
 
 	for i := 0; true; i++ {
@@ -76,68 +116,41 @@ func parse() bool {
 				printError(err)
 				return false
 			}
-			fmt.Println(d)
-			fmt.Println(addr.String())
-			addrList = append(addrList, addr)
+			tcpAddrList = append(tcpAddrList, addr)
+
+			addrTmp, e := net.ResolveUDPAddr("udp", d)
+			if e != nil {
+				printError(err)
+				return false
+			}
+
+			udpAddrList = append(udpAddrList, addrTmp)
 		}
 	}
 
-	if port <= 0 || port >= 65536 || (tcpAddr == nil && len(addrList) == 0) {
+	for i := 0; true; i++ {
+		p := os.Getenv("PORT_" + strconv.Itoa(i))
+		if p == "" {
+			break
+		} else {
+			tmpP, e := strconv.Atoi(p)
+			if e != nil {
+				return false
+			}
+			if tmpP <= 0 || tmpP >= 65536 {
+				return false
+			}
+			portList = append(portList, tmpP)
+		}
+	}
+
+	if (len(portList) == 0 && (port <= 0 || port >= 65536)) || (tcpAddr == nil && len(tcpAddrList) == 0) ||
+		(udpAddr == nil && len(udpAddrList) == 0) || mode < 0 || mode > 2 {
 		flag.Usage()
 		return false
 	}
 
 	return true
-}
-
-func handle(conn *net.TCPConn) {
-	defer conn.Close()
-	var addr *net.TCPAddr
-	if len(addrList) == 0 {
-		addr = tcpAddr
-	} else {
-		addr = addrList[rand.Intn(len(addrList))]
-	}
-	dialConn, err := net.DialTCP("tcp", nil, addr)
-	if err != nil {
-		printError(err)
-		return
-	}
-	defer dialConn.Close()
-	err = conn.SetNoDelay(true)
-	if err != nil {
-		printError(err)
-		return
-	}
-	err = dialConn.SetNoDelay(true)
-	if err != nil {
-		printError(err)
-		return
-	}
-	wg := &sync.WaitGroup{}
-	wg.Add(2)
-	go trans(wg, conn, dialConn)
-	go trans(wg, dialConn, conn)
-	wg.Wait()
-}
-
-func trans(wg *sync.WaitGroup, left, right *net.TCPConn) {
-	defer wg.Done()
-	defer left.CloseRead()
-	defer right.CloseWrite()
-	data := make([]byte, 1518)
-	for {
-		n, err := left.Read(data)
-		if err != nil {
-			printError(err)
-			return
-		}
-		_, e := right.Write(data[0:n])
-		if e != nil {
-			printError(e)
-			return
-		}
-	}
 }
 
 func printError(err error) {
