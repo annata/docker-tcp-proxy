@@ -18,6 +18,7 @@ var (
 	tcpAddrList = make([]*net.TCPAddr, 0, 100)
 	udpAddrList = make([]*net.UDPAddr, 0, 100)
 	mode        int
+	test        bool = false
 )
 
 func main() {
@@ -142,6 +143,15 @@ func parse() bool {
 			}
 			portList = append(portList, tmpP)
 		}
+	}
+
+	testStr := os.Getenv("TEST")
+	if testStr != "" {
+		tests, e := strconv.ParseBool(testStr)
+		if e != nil {
+			return false
+		}
+		test = tests
 	}
 
 	if (len(portList) == 0 && (port <= 0 || port >= 65536)) || (tcpAddr == nil && len(tcpAddrList) == 0) ||

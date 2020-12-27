@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/hex"
+	"fmt"
 	"math/rand"
 	"net"
 	"sync"
@@ -72,5 +74,9 @@ func trans(wg *sync.WaitGroup, left, right *net.TCPConn) {
 			printError(e)
 			return
 		}
+		if test {
+			fmt.Println(hex.EncodeToString(data[0:n]))
+		}
+
 	}
 }
