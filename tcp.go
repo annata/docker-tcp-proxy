@@ -30,8 +30,13 @@ func tcp(wg *sync.WaitGroup, port, start, length int) {
 func handle(conn *net.TCPConn, start, length int) {
 	defer conn.Close()
 	var addr *net.TCPAddr
-	if len(tcpAddrList) == 0 {
+	tcpAddrListLen := len(tcpAddrList)
+	if tcpAddrListLen == 0 {
 		addr = tcpAddr
+	} else if length == 0 {
+		return
+	} else if length == 1 {
+		addr = tcpAddrList[start]
 	} else {
 		addr = tcpAddrList[start+rand.Intn(length)]
 	}
@@ -62,7 +67,7 @@ func trans(wg *sync.WaitGroup, left, right *net.TCPConn) {
 	defer wg.Done()
 	defer left.CloseRead()
 	defer right.CloseWrite()
-	data := make([]byte, 1518)
+	data := make([]byte, 1600)
 	for {
 		n, err := left.Read(data)
 		if err != nil {
