@@ -122,9 +122,9 @@ import (
 	"io"
 	"os"
 	"syscall"
-
-	"golang.org/x/sys/unix"
 )
+
+var SPLICE_F_NONBLOCK = 0x2
 
 func (p *Pipe) bufferSize() (int, error) {
 	var (
@@ -132,10 +132,10 @@ func (p *Pipe) bufferSize() (int, error) {
 		errno syscall.Errno
 	)
 	err := p.wrc.Control(func(fd uintptr) {
-		size, _, errno = unix.Syscall(
-			unix.SYS_FCNTL,
+		size, _, errno = syscall.Syscall(
+			syscall.SYS_FCNTL,
 			fd,
-			unix.F_GETPIPE_SZ,
+			syscall.F_GETPIPE_SZ,
 			0,
 		)
 	})
@@ -151,10 +151,10 @@ func (p *Pipe) bufferSize() (int, error) {
 func (p *Pipe) setBufferSize(n int) error {
 	var errno syscall.Errno
 	err := p.wrc.Control(func(fd uintptr) {
-		_, _, errno = unix.Syscall(
-			unix.SYS_FCNTL,
+		_, _, errno = syscall.Syscall(
+			syscall.SYS_FCNTL,
 			fd,
-			unix.F_SETPIPE_SZ,
+			syscall.F_SETPIPE_SZ,
 			uintptr(n),
 		)
 	})
@@ -210,7 +210,7 @@ again:
 	rrcerr = p.rrc.Read(func(prfd uintptr) bool {
 		wrcerr = p.teepipe.wrc.Write(func(pwfd uintptr) bool {
 			copied, operr = tee(prfd, pwfd, len(b))
-			if operr == unix.EAGAIN {
+			if operr == syscall.EAGAIN {
 				if !readready {
 					waitread = true
 				}
@@ -233,7 +233,7 @@ again:
 	wrcerr = p.teepipe.wrc.Write(func(pwfd uintptr) bool {
 		p.rrc.Read(func(prfd uintptr) bool {
 			copied, operr = tee(prfd, pwfd, len(b))
-			if operr == unix.EAGAIN {
+			if operr == syscall.EAGAIN {
 				if writeready {
 					waitreadagain = true
 				} else {
@@ -344,11 +344,11 @@ again:
 				limit -= int64(n)
 				moved += int64(n)
 			}
-			if operr == unix.EINVAL {
+			if operr == syscall.EINVAL {
 				fallback = true
 				return true
 			}
-			if operr == unix.EAGAIN {
+			if operr == syscall.EAGAIN {
 				waitread = !readready
 				return true
 			}
@@ -391,7 +391,7 @@ again:
 				limit -= int64(n)
 				moved += int64(n)
 			}
-			if operr == unix.EAGAIN {
+			if operr == syscall.EAGAIN {
 				if writeready {
 					waitwrite = false
 					waitreadagain = true
@@ -459,11 +459,11 @@ again:
 			if n > 0 {
 				moved += int64(n)
 			}
-			if operr == unix.EINVAL {
+			if operr == syscall.EINVAL {
 				fallback = true
 				return true
 			}
-			if operr == unix.EAGAIN {
+			if operr == syscall.EAGAIN {
 				if !readready {
 					waitread = true
 				}
@@ -505,7 +505,7 @@ again:
 			if n > 0 {
 				moved += int64(n)
 			}
-			if operr == unix.EAGAIN {
+			if operr == syscall.EAGAIN {
 				if writeready {
 					waitreadagain = true
 				} else {
@@ -637,12 +637,12 @@ func spliceDrain(p *Pipe, rrc syscall.RawConn, max int) (int, bool, error) {
 		rrcerr = rrc.Read(func(rfd uintptr) bool {
 			var n int
 			n, serr = splice(rfd, pwfd, max)
-			moved = int(n)
-			if serr == unix.EINVAL {
+			moved = n
+			if serr == syscall.EINVAL {
 				fallback = true
 				return true
 			}
-			if serr == unix.EAGAIN {
+			if serr == syscall.EAGAIN {
 				return false
 			}
 			serr = os.NewSyscallError("splice", serr)
@@ -675,11 +675,11 @@ again:
 				moved += int(n)
 				inpipe -= int(n)
 			}
-			if serr == unix.EINVAL {
+			if serr == syscall.EINVAL {
 				fallback = true
 				return true
 			}
-			if serr == unix.EAGAIN {
+			if serr == syscall.EAGAIN {
 				return false
 			}
 			serr = os.NewSyscallError("splice", serr)
@@ -720,11 +720,11 @@ type onlyReader struct {
 
 // tee calls tee(2) with SPLICE_F_NONBLOCK.
 func tee(rfd, wfd uintptr, max int) (int64, error) {
-	return unix.Tee(int(rfd), int(wfd), max, unix.SPLICE_F_NONBLOCK)
+	return syscall.Tee(int(rfd), int(wfd), max, SPLICE_F_NONBLOCK)
 }
 
 // splice calls splice(2) with SPLICE_F_NONBLOCK.
 func splice(rfd, wfd uintptr, max int) (int, error) {
-	n, err := unix.Splice(int(rfd), nil, int(wfd), nil, max, unix.SPLICE_F_NONBLOCK)
+	n, err := syscall.Splice(int(rfd), nil, int(wfd), nil, max, SPLICE_F_NONBLOCK)
 	return int(n), err
 }

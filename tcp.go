@@ -46,16 +46,6 @@ func handle(conn *net.TCPConn, start, length int) {
 		return
 	}
 	defer dialConn.Close()
-	err = conn.SetNoDelay(true)
-	if err != nil {
-		printError(err)
-		return
-	}
-	err = dialConn.SetNoDelay(true)
-	if err != nil {
-		printError(err)
-		return
-	}
 	if proxyProtocol {
 		remoteTmp, err := net.ResolveTCPAddr("tcp", conn.RemoteAddr().String())
 		if err != nil {
