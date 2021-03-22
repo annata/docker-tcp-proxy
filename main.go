@@ -11,14 +11,15 @@ import (
 )
 
 var (
-	port        int
-	portList    = make([]int, 0, 100)
-	tcpAddr     *net.TCPAddr
-	udpAddr     *net.UDPAddr
-	tcpAddrList = make([]*net.TCPAddr, 0, 100)
-	udpAddrList = make([]*net.UDPAddr, 0, 100)
-	mode        int
-	test        bool = false
+	port          int
+	portList      = make([]int, 0, 100)
+	tcpAddr       *net.TCPAddr
+	udpAddr       *net.UDPAddr
+	tcpAddrList   = make([]*net.TCPAddr, 0, 100)
+	udpAddrList   = make([]*net.UDPAddr, 0, 100)
+	mode          int
+	test          = false
+	proxyProtocol = false
 )
 
 func main() {
@@ -67,6 +68,8 @@ func parse() bool {
 	flag.IntVar(&port, "p", 0, "监听端口")
 	flag.StringVar(&domain, "d", "", "访问的域名端口")
 	flag.IntVar(&mode, "m", 0, "转发模式,0为tcp,1为tcp+udp,2为udp.默认为0")
+	flag.BoolVar(&test, "t", false, "测试模式")
+	flag.BoolVar(&proxyProtocol, "proxy", false, "proxy_protocol模式")
 	flag.Parse()
 	modeStr := os.Getenv("MODE")
 	if modeStr != "" {
@@ -152,6 +155,15 @@ func parse() bool {
 			return false
 		}
 		test = tests
+	}
+
+	proxyProtocolStr := os.Getenv("PROXY_PROTOCOL")
+	if proxyProtocolStr != "" {
+		proxyProtocols, e := strconv.ParseBool(proxyProtocolStr)
+		if e != nil {
+			return false
+		}
+		proxyProtocol = proxyProtocols
 	}
 
 	if (len(portList) == 0 && (port <= 0 || port >= 65536)) || (tcpAddr == nil && len(tcpAddrList) == 0) ||

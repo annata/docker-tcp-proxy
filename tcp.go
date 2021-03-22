@@ -56,6 +56,22 @@ func handle(conn *net.TCPConn, start, length int) {
 		printError(err)
 		return
 	}
+	if proxyProtocol {
+		remoteTmp, err := net.ResolveTCPAddr("tcp", conn.RemoteAddr().String())
+		if err != nil {
+			return
+		}
+		localTmp, err := net.ResolveTCPAddr("tcp", conn.LocalAddr().String())
+		if err != nil {
+			return
+		}
+		proxyProtocolText := fmt.Sprintf("PROXY TCP4 %s %s %d %d\r\n", remoteTmp.IP.String(), localTmp.IP.String(), remoteTmp.Port, localTmp.Port)
+		_, err = dialConn.Write([]byte(proxyProtocolText))
+		if err != nil {
+			return
+		}
+	}
+
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 	go trans(wg, conn, dialConn)
@@ -67,21 +83,26 @@ func trans(wg *sync.WaitGroup, left, right *net.TCPConn) {
 	defer wg.Done()
 	defer left.CloseRead()
 	defer right.CloseWrite()
-	data := make([]byte, 1600)
-	for {
-		n, err := left.Read(data)
-		if err != nil {
-			printError(err)
-			return
-		}
-		_, e := right.Write(data[0:n])
-		if e != nil {
-			printError(e)
-			return
-		}
-		if test {
-			fmt.Println(hex.EncodeToString(data[0:n]))
-		}
 
+	if test {
+		data := make([]byte, 1600)
+		for {
+			n, err := left.Read(data)
+			if err != nil {
+				printError(err)
+				return
+			}
+			_, e := right.Write(data[0:n])
+			if e != nil {
+				printError(e)
+				return
+			}
+			if test {
+				fmt.Println(hex.EncodeToString(data[0:n]))
+			}
+
+		}
+	} else {
+		_, _ = Transfer(right, left)
 	}
 }
