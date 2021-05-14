@@ -90,7 +90,6 @@ func trans(wg *sync.WaitGroup, left, right *net.TCPConn) {
 			if test {
 				fmt.Println(hex.EncodeToString(data[0:n]))
 			}
-
 		}
 	} else {
 		_, _ = Transfer(right, left)
