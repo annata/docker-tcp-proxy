@@ -31,10 +31,19 @@ func udp(wg *sync.WaitGroup, port, start, length int) {
 
 func udpHandle(listen *net.UDPConn, data []byte, source *net.UDPAddr, start, length int) {
 	var addr *net.UDPAddr
+	udpAddtTemp := ""
 	if len(udpAddrList) == 0 {
-		addr = udpAddr
+		udpAddtTemp = udpAddr
+	} else if length == 0 {
+		return
+	} else if length == 1 {
+		udpAddtTemp = udpAddrList[start]
 	} else {
-		addr = udpAddrList[start+rand.Intn(length)]
+		udpAddtTemp = udpAddrList[start+rand.Intn(length)]
+	}
+	addr, err := net.ResolveUDPAddr("udp", udpAddtTemp)
+	if err != nil {
+		return
 	}
 
 	con, err := net.DialUDP("udp", nil, addr)

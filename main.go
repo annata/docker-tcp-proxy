@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"math/rand"
-	"net"
 	"os"
 	"strconv"
 	"sync"
@@ -13,15 +12,15 @@ import (
 var (
 	port          int
 	portList      = make([]int, 0, 100)
-	tcpAddr       *net.TCPAddr
-	udpAddr       *net.UDPAddr
-	tcpAddrList   = make([]*net.TCPAddr, 0, 100)
-	udpAddrList   = make([]*net.UDPAddr, 0, 100)
+	tcpAddr       string
+	udpAddr       string
+	tcpAddrList   = make([]string, 0, 100)
+	udpAddrList   = make([]string, 0, 100)
 	mode          int
-	test                       = false
-	proxyProtocol              = false
-	proxyAddr     *net.TCPAddr = nil
-	proxyUser                  = ""
+	test          = false
+	proxyProtocol = false
+	proxyAddr     = ""
+	proxyUser     = ""
 )
 
 func main() {
@@ -107,27 +106,11 @@ func parse() bool {
 		proxyUser = proxyUserStr
 	}
 	if domain != "" {
-		addr, err := net.ResolveTCPAddr("tcp", domain)
-		if err != nil {
-			printError(err)
-			return false
-		}
-		tcpAddr = addr
-
-		addrTmp, e := net.ResolveUDPAddr("udp", domain)
-		if e != nil {
-			printError(err)
-			return false
-		}
-		udpAddr = addrTmp
+		tcpAddr = domain
+		udpAddr = domain
 	}
 	if proxyDomain != "" {
-		addr, err := net.ResolveTCPAddr("tcp", proxyDomain)
-		if err != nil {
-			printError(err)
-			return false
-		}
-		proxyAddr = addr
+		proxyAddr = proxyDomain
 	}
 
 	for i := 0; true; i++ {
@@ -135,20 +118,8 @@ func parse() bool {
 		if d == "" {
 			break
 		} else {
-			addr, err := net.ResolveTCPAddr("tcp", d)
-			if err != nil {
-				printError(err)
-				return false
-			}
-			tcpAddrList = append(tcpAddrList, addr)
-
-			addrTmp, e := net.ResolveUDPAddr("udp", d)
-			if e != nil {
-				printError(err)
-				return false
-			}
-
-			udpAddrList = append(udpAddrList, addrTmp)
+			tcpAddrList = append(tcpAddrList, d)
+			udpAddrList = append(udpAddrList, d)
 		}
 	}
 
@@ -186,8 +157,8 @@ func parse() bool {
 		proxyProtocol = proxyProtocols
 	}
 
-	if (len(portList) == 0 && (port <= 0 || port >= 65536)) || (tcpAddr == nil && len(tcpAddrList) == 0) ||
-		(udpAddr == nil && len(udpAddrList) == 0) || mode < 0 || mode > 2 {
+	if (len(portList) == 0 && (port <= 0 || port >= 65536)) || (tcpAddr == "" && len(tcpAddrList) == 0) ||
+		(udpAddr == "" && len(udpAddrList) == 0) || mode < 0 || mode > 2 {
 		flag.Usage()
 		return false
 	}

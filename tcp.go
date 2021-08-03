@@ -32,7 +32,7 @@ func tcp(wg *sync.WaitGroup, port, start, length int) {
 
 func handle(conn *net.TCPConn, start, length int) {
 	defer conn.Close()
-	var addr *net.TCPAddr
+	addr := ""
 	tcpAddrListLen := len(tcpAddrList)
 	if tcpAddrListLen == 0 {
 		addr = tcpAddr
@@ -43,30 +43,37 @@ func handle(conn *net.TCPConn, start, length int) {
 	} else {
 		addr = tcpAddrList[start+rand.Intn(length)]
 	}
-	var realAddr *net.TCPAddr
-	if proxyAddr == nil {
+	realAddr := ""
+	if proxyAddr == "" {
 		realAddr = addr
 	} else {
 		realAddr = proxyAddr
 	}
 
-	dialConn, err := net.DialTCP("tcp", nil, realAddr)
+	tcpAddrTemp, err := net.ResolveTCPAddr("tcp", realAddr)
+	if err != nil {
+		return
+	}
+	dialConn, err := net.DialTCP("tcp", nil, tcpAddrTemp)
 	if err != nil {
 		printError(err)
 		return
 	}
 	defer dialConn.Close()
-	if proxyAddr != nil {
-		proxyText := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nProxy-Authorization: Basic %s\r\n\r\n", addr.String(), base64.StdEncoding.EncodeToString([]byte(proxyUser)))
+	dialConnReader := bufio.NewReader(dialConn)
+	if proxyAddr != "" {
+		proxyText := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nProxy-Authorization: Basic %s\r\nProxy-Connection: Keep-Alive\r\n\r\n", addr, base64.StdEncoding.EncodeToString([]byte(proxyUser)))
 		_, err = dialConn.Write([]byte(proxyText))
 		if err != nil {
 			return
 		}
 		success := false
-		scanner := bufio.NewScanner(dialConn)
-		for scanner.Scan() {
-			command := scanner.Text()
-			if command == "" {
+		for {
+			command, _, err := dialConnReader.ReadLine()
+			if err != nil {
+				break
+			}
+			if string(command) == "" {
 				success = true
 				break
 			}
@@ -93,12 +100,12 @@ func handle(conn *net.TCPConn, start, length int) {
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
-	go trans(wg, conn, dialConn)
-	go trans(wg, dialConn, conn)
+	go trans(wg, conn, dialConn, conn, dialConn)
+	go trans(wg, dialConn, conn, dialConnReader, conn)
 	wg.Wait()
 }
 
-func trans(wg *sync.WaitGroup, left, right *net.TCPConn) {
+func trans(wg *sync.WaitGroup, left, right *net.TCPConn, src io.Reader, dst io.Writer) {
 	defer wg.Done()
 	defer left.CloseRead()
 	defer right.CloseWrite()
@@ -106,12 +113,12 @@ func trans(wg *sync.WaitGroup, left, right *net.TCPConn) {
 	if test {
 		data := make([]byte, 1600)
 		for {
-			n, err := left.Read(data)
+			n, err := src.Read(data)
 			if err != nil {
 				printError(err)
 				return
 			}
-			_, e := right.Write(data[0:n])
+			_, e := dst.Write(data[0:n])
 			if e != nil {
 				printError(e)
 				return
@@ -121,6 +128,6 @@ func trans(wg *sync.WaitGroup, left, right *net.TCPConn) {
 			}
 		}
 	} else {
-		_, _ = io.Copy(right, left)
+		_, _ = io.Copy(dst, src)
 	}
 }
