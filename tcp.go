@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"sync"
@@ -40,12 +43,38 @@ func handle(conn *net.TCPConn, start, length int) {
 	} else {
 		addr = tcpAddrList[start+rand.Intn(length)]
 	}
-	dialConn, err := net.DialTCP("tcp", nil, addr)
+	var realAddr *net.TCPAddr
+	if proxyAddr == nil {
+		realAddr = addr
+	} else {
+		realAddr = proxyAddr
+	}
+
+	dialConn, err := net.DialTCP("tcp", nil, realAddr)
 	if err != nil {
 		printError(err)
 		return
 	}
 	defer dialConn.Close()
+	if proxyAddr != nil {
+		proxyText := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nProxy-Authorization: Basic %s\r\n\r\n", addr.String(), base64.StdEncoding.EncodeToString([]byte(proxyUser)))
+		_, err = dialConn.Write([]byte(proxyText))
+		if err != nil {
+			return
+		}
+		success := false
+		scanner := bufio.NewScanner(dialConn)
+		for scanner.Scan() {
+			command := scanner.Text()
+			if command == "" {
+				success = true
+				break
+			}
+		}
+		if !success {
+			return
+		}
+	}
 	if proxyProtocol {
 		remoteTmp, err := net.ResolveTCPAddr("tcp", conn.RemoteAddr().String())
 		if err != nil {
@@ -92,6 +121,6 @@ func trans(wg *sync.WaitGroup, left, right *net.TCPConn) {
 			}
 		}
 	} else {
-		_, _ = Transfer(right, left)
+		_, _ = io.Copy(right, left)
 	}
 }

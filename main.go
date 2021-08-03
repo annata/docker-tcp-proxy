@@ -18,8 +18,10 @@ var (
 	tcpAddrList   = make([]*net.TCPAddr, 0, 100)
 	udpAddrList   = make([]*net.UDPAddr, 0, 100)
 	mode          int
-	test          = false
-	proxyProtocol = false
+	test                       = false
+	proxyProtocol              = false
+	proxyAddr     *net.TCPAddr = nil
+	proxyUser                  = ""
 )
 
 func main() {
@@ -65,8 +67,11 @@ func main() {
 
 func parse() bool {
 	domain := ""
+	proxyDomain := ""
 	flag.IntVar(&port, "p", 0, "监听端口")
 	flag.StringVar(&domain, "d", "", "访问的域名端口")
+	flag.StringVar(&proxyDomain, "pd", "", "代理url")
+	flag.StringVar(&proxyUser, "pu", "", "代理用户名密码")
 	flag.IntVar(&mode, "m", 0, "转发模式,0为tcp,1为tcp+udp,2为udp.默认为0")
 	flag.BoolVar(&test, "t", false, "测试模式")
 	flag.BoolVar(&proxyProtocol, "proxy", false, "proxy_protocol模式")
@@ -93,7 +98,14 @@ func parse() bool {
 	if domainStr != "" {
 		domain = domainStr
 	}
-
+	proxyDomainStr := os.Getenv("PROXY_DOMAIN")
+	if proxyDomainStr != "" {
+		proxyDomain = proxyDomainStr
+	}
+	proxyUserStr := os.Getenv("PROXY_USER")
+	if proxyUserStr != "" {
+		proxyUser = proxyUserStr
+	}
 	if domain != "" {
 		addr, err := net.ResolveTCPAddr("tcp", domain)
 		if err != nil {
@@ -108,6 +120,14 @@ func parse() bool {
 			return false
 		}
 		udpAddr = addrTmp
+	}
+	if proxyDomain != "" {
+		addr, err := net.ResolveTCPAddr("tcp", proxyDomain)
+		if err != nil {
+			printError(err)
+			return false
+		}
+		proxyAddr = addr
 	}
 
 	for i := 0; true; i++ {
