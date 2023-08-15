@@ -2,11 +2,9 @@ package main
 
 import (
 	"flag"
-	"math/rand"
 	"os"
 	"strconv"
 	"sync"
-	"time"
 )
 
 var (
@@ -24,7 +22,6 @@ var (
 )
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
 	if !parse() {
 		return
 	}
