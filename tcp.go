@@ -60,8 +60,10 @@ func handle(conn *net.TCPConn, start, length int) {
 		return
 	}
 	defer dialConn.Close()
-	dialConnReader := bufio.NewReader(dialConn)
+	var src io.Reader = nil
+
 	if proxyAddr != "" {
+		dialConnReader := bufio.NewReader(dialConn)
 		proxyText := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nProxy-Authorization: Basic %s\r\nProxy-Connection: Keep-Alive\r\n\r\n", addr, base64.StdEncoding.EncodeToString([]byte(proxyUser)))
 		_, err = dialConn.Write([]byte(proxyText))
 		if err != nil {
@@ -81,6 +83,9 @@ func handle(conn *net.TCPConn, start, length int) {
 		if !success {
 			return
 		}
+		src = dialConnReader
+	} else {
+		src = dialConn
 	}
 	if proxyProtocol {
 		remoteTmp, err := net.ResolveTCPAddr("tcp", conn.RemoteAddr().String())
@@ -101,7 +106,7 @@ func handle(conn *net.TCPConn, start, length int) {
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 	go trans(wg, conn, dialConn, conn, dialConn)
-	go trans(wg, dialConn, conn, dialConnReader, conn)
+	go trans(wg, dialConn, conn, src, conn)
 	wg.Wait()
 }
 
